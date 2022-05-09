@@ -4,20 +4,15 @@ using Serilog;
 using Serilog.Sinks.Elasticsearch;
 using System;
 using System.IO;
-using System.Reflection;
 
 namespace Common.Logging
 {
 
     /*
-     * https://github.com/shazforiot/Elasticsearch-kibana-docker-compose-single-node
-     * 
-     * 
+     * https://github.com/shazforiot/Elasticsearch-kibana-docker-compose-single-node    
      * 
      * https://www.elastic.co/guide/en/elasticsearch/reference/7.5/docker.html
      * https://www.elastic.co/guide/en/kibana/current/docker.html
-     * 
-     * 
      * 
      * http://localhost:9200/
      * 
@@ -32,51 +27,66 @@ namespace Common.Logging
      * 
      * http://localhost:5601
      * 
-     * 
+     * AppSettings Configuration
+     * https://github.com/serilog/serilog/wiki/AppSettings
      */
     public static class SeriLogger
     {
         public static Action<HostBuilderContext, LoggerConfiguration> Configure =>
            (context, loggerConfiguration) =>
            {
-               var logSetting = context.Configuration.Get<LogSettings>();
-               string environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-               string logPath = string.Empty, logFilePath = string.Empty, elasticUri = string.Empty;
-
-               loggerConfiguration
-                    .Enrich.FromLogContext()
-                    .Enrich.WithMachineName()
-                    .WriteTo.Debug()
-                    .WriteTo.Console()
-                    .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
-                    .Enrich.WithProperty("Application", context.HostingEnvironment.ApplicationName)
-                    .ReadFrom.Configuration(context.Configuration);
-
-               if ((logSetting.LogType ?? string.Empty).ToUpper().Contains("FILE"))
+               try
                {
-                   //logPath = context.Configuration.GetValue<string>("LogPath:Path");
-                   logPath = logSetting.LogFileConfiguration.LogFilePath;
-                   logFilePath = Path.Combine(logPath, string.Format("LogData_{0}.log", DateTime.Today.ToString("yyyyMMdd")));
+                   var logSetting = context.Configuration.Get<LogSettings>();
+                   string environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+                   string logPath = string.Empty, logFilePath = string.Empty, elasticUri = string.Empty;
 
-                   loggerConfiguration.WriteTo.File(path: logFilePath, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
-                                rollOnFileSizeLimit: true,
-                                retainedFileCountLimit: 20,
-                                rollingInterval: RollingInterval.Day,
-                                fileSizeLimitBytes: 10000);
+                   loggerConfiguration
+                        .Enrich.FromLogContext()
+                        .Enrich.WithMachineName()
+                        .WriteTo.Debug()
+                        .WriteTo.Console()
+                        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
+                        .Enrich.WithProperty("Application", context.HostingEnvironment.ApplicationName)
+                        .ReadFrom.Configuration(context.Configuration);
+
+                   if ((logSetting.LogType ?? string.Empty).ToUpper().Contains("FILE"))
+                   {
+                       logPath = logSetting.LogFileConfiguration.LogFilePath;
+                       if (!string.IsNullOrEmpty(logPath))
+                       {
+                           //logPath = context.Configuration.GetValue<string>("LogPath:Path");
+                           logFilePath = Path.Combine(logPath, string.Format("LogData_{0}.log", DateTime.Today.ToString("yyyyMMdd")));
+
+                           loggerConfiguration.WriteTo.
+                                File(path: logFilePath, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+                                        rollOnFileSizeLimit: true,
+                                        retainedFileCountLimit: 20,
+                                        rollingInterval: RollingInterval.Day,
+                                        fileSizeLimitBytes: 10000);
+                       }
+                   }
+
+                   if ((logSetting.LogType ?? string.Empty).ToUpper().Contains("ELASTIC"))
+                   {
+                       elasticUri = logSetting.ElasticConfiguration.Uri;
+                       if (!string.IsNullOrEmpty(elasticUri))
+                       {
+                           loggerConfiguration.WriteTo
+                            .Elasticsearch(
+                               new ElasticsearchSinkOptions(new Uri(elasticUri))
+                               {
+                                   IndexFormat = $"applogs-{context.HostingEnvironment.ApplicationName?.ToLower().Replace(".", "-")}-{context.HostingEnvironment.EnvironmentName?.ToLower().Replace(".", "-")}-{DateTime.UtcNow:yyyy-MM}",
+                                   AutoRegisterTemplate = true,
+                                   NumberOfShards = 2,
+                                   NumberOfReplicas = 1
+                               });
+                       }
+                   }
                }
-
-               if ((logSetting.LogType ?? string.Empty).ToUpper().Contains("ELASTIC"))
+               catch
                {
-                   elasticUri = logSetting.ElasticConfiguration.Uri;
-
-                   loggerConfiguration.WriteTo.Elasticsearch(
-                           new ElasticsearchSinkOptions(new Uri(elasticUri))
-                           {
-                               IndexFormat = $"applogs-{context.HostingEnvironment.ApplicationName?.ToLower().Replace(".", "-")}-{context.HostingEnvironment.EnvironmentName?.ToLower().Replace(".", "-")}-{DateTime.UtcNow:yyyy-MM}",
-                               AutoRegisterTemplate = true,
-                               NumberOfShards = 2,
-                               NumberOfReplicas = 1
-                           });
+                   throw;
                }
            };
     }

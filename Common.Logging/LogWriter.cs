@@ -3,6 +3,9 @@ using System;
 
 namespace Common.Logging
 {
+    /// <summary>
+    /// Common logging class
+    /// </summary>
     public static class LogWriter
     {
         public static void LogError(Exception ex)
@@ -15,5 +18,14 @@ namespace Common.Logging
             Log.Information(message);
         }
 
+        public static void LogDebug(string message)
+        {
+            Log.Debug(message);
+        }
+        
+        public static void LogFatal(string message)
+        {
+            Log.Fatal(message);
+        }
     }
 }
